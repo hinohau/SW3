@@ -1,4 +1,5 @@
 
+<meta charset="UTF-8">
 <script src="go.js"></script>
 <link href="goSamples.css" rel="stylesheet" type="text/css" />
 <script src="go-debug.js" type="text/javascript"></script>
@@ -22,9 +23,19 @@
 <script src="inspector.js"></script>
 <script src="ExtendedBrush.js"></script>
 
+<script src="DrawCommandHandler.js"></script>
+<link href="BPMN.css" rel="stylesheet" type="text/css" />
+<script src="BPMNClasses.js"></script>
+<script src="BPMN.js"></script>
+
+
+
 <script>
 function init() {
     
+
+
+
     var $ = go.GraphObject.make;  // for conciseness in defining templates
 
     myDiagram =
@@ -58,7 +69,7 @@ function init() {
         });
 
     // when the document is modified, add a "*" to the title and enable the "Save" button
-    
+
 
     myDiagram.addDiagramListener("Modified", function(e) {
       var button = document.getElementById("SaveButton");
@@ -243,8 +254,8 @@ function init() {
                 { toArrow: "Standard", stroke: null })
             ),
           model: new go.GraphLinksModel([  // specify the contents of the Palette
-            { text: "Battery", fill: "red" },
-            { text: "Resistor", fill: "green"},
+            { text: "+ Battery -", fill: "red", name: "Hello"},
+            { text: "Resistor", figure: "resistor"},
             { text: "LightBulb", figure: "Circle" },
             { text: "???", figure: "Diamond", fill: "lightskyblue" },
             { text: "End", figure: "Circle", fill: "red" },
@@ -255,15 +266,15 @@ function init() {
           ])
         });
 
+
         $(function() {
         var inspector = new Inspector('infoDraggable', myDiagram,
           {
             acceptButton: true,
             resetButton: true,
             propertyNames: {
-              "Node": ["location", "background", "scale", "angle", "isShadowed", "resizable","text"],
-              "SHAPE": ["fill", "stroke", "strokeWidth", "figure"],
-              "TEXT": ["text", "font"]
+              "Node": ["location", "background", "scale", "angle", "name", "resizable", "voltage"],
+              
             }
           });
         });
@@ -312,34 +323,334 @@ function init() {
     if (pos) myDiagram.position = go.Point.parse(pos);
   }
 
-  
+  function addActivityNodeBoundaryEvent(evType, evDim) {
+  myDiagram.startTransaction("addBoundaryEvent");
+  myDiagram.selection.each(function(node) {
+    // skip any selected Links
+    if (!(node instanceof go.Node)) return;
+    if (node.data && (node.data.category === "activity" || node.data.category === "subprocess")) {
+      // compute the next available index number for the side
+      var i = 0;
+      var defaultPort = node.findPort("");
+      while (node.findPort("be" + i.toString()) !== defaultPort) i++;           // now this new port name is unique within the whole Node because of the side prefix
+      var name = "be" + i.toString();
+      if (!node.data.boundaryEventArray) {myDiagram.model.setDataProperty(node.data, "boundaryEventArray", []);}       // initialize the Array of port data if necessary
+      // create a new port data object
+      var newportdata = {
+          portId: name,
+          eventType: evType,
+          eventDimension: evDim,
+          color: "white",
+          alignmentIndex: i
+          // if you add port data properties here, you should copy them in copyPortData above  ** BUG...  we don't do that.
+        };
+        // and add it to the Array of port data
+      myDiagram.model.insertArrayItem(node.data.boundaryEventArray, -1, newportdata);
+    }
+  });
+  myDiagram.commitTransaction("addBoundaryEvent");
+}
+
+// changes the item of the object
+function rename(obj) {
+  myDiagram.startTransaction("rename");
+  var newName = prompt("Rename " + obj.part.data.item + " to:");
+  myDiagram.model.setDataProperty(obj.part.data, "item", newName);
+  myDiagram.commitTransaction("rename");
+}
+
+// shows/hides gridlines
+// to be implemented onclick of a button
+function updateGridOption() {
+  myDiagram.startTransaction("grid");
+  var grid = document.getElementById("grid");
+  myDiagram.grid.visible = grid.checked;
+  myDiagram.commitTransaction("grid");
+}
+
+// enables/disables snapping tools, to be implemented by buttons
+function updateSnapOption() {
+  // no transaction needed, because we are modifying tools for future use
+  var snap = document.getElementById("snap");
+  if (snap.checked) {
+    myDiagram.toolManager.draggingTool.isGridSnapEnabled = true;
+    myDiagram.toolManager.resizingTool.isGridSnapEnabled = true;
+  } else {
+    myDiagram.toolManager.draggingTool.isGridSnapEnabled = false;
+    myDiagram.toolManager.resizingTool.isGridSnapEnabled = false;
+  }
+}
+
+// user specifies the amount of space between nodes when making rows and column
+function askSpace() {
+  var space = prompt("Desired space between nodes (in pixels):", "0");
+  return space;
+}
+
+var UnsavedFileName = "(Unsaved File)";
+
+function getCurrentFileName() {
+  var currentFile = document.getElementById("currentFile");
+  var name = currentFile.textContent;
+  if (name[name.length - 1] === "*") return name.substr(0, name.length - 1);
+  return name;
+}
+
+function setCurrentFileName(name) {
+  var currentFile = document.getElementById("currentFile");
+  if (myDiagram.isModified) {
+    name += "*";
+  }
+  currentFile.textContent = name;
+}
+
+function newDocument() {
+  // checks to see if all changes have been saved
+  if (myDiagram.isModified) {
+    var save = confirm("Would you like to save changes to " + getCurrentFileName() + "?");
+    if (save) {
+      saveDocument();
+    }
+  }
+  setCurrentFileName(UnsavedFileName);
+  // loads an empty diagram
+  myDiagram.model = new go.GraphLinksModel();
+  resetModel();
+}
+
+function resetModel() {
+  myDiagram.model.undoManager.isEnabled = true;
+  myDiagram.model.linkFromPortIdProperty = "fromPort";
+  myDiagram.model.linkToPortIdProperty = "toPort";
+
+  myDiagram.model.copiesArrays = true;
+  myDiagram.model.copiesArrayObjects = true;
+  myDiagram.isModified = false;
+}
+
+function checkLocalStorage() {
+  return (typeof (Storage) !== "undefined") && (window.localStorage !== undefined);
+}
+
+// saves the current floor plan to local storage
+function saveDocument() {
+  if (checkLocalStorage()) {
+    var saveName = getCurrentFileName();
+    if (saveName === UnsavedFileName) {
+      saveDocumentAs();
+    } else {
+      saveDiagramProperties()
+      window.localStorage.setItem(saveName, myDiagram.model.toJson());
+      myDiagram.isModified = false;
+    }
+  }
+}
+
+// saves floor plan to local storage with a new name
+function saveDocumentAs() {
+  if (checkLocalStorage()) {
+    var saveName = prompt("Save file as...", getCurrentFileName());
+    if (saveName && saveName !== UnsavedFileName) {
+      setCurrentFileName(saveName);
+      saveDiagramProperties()
+      window.localStorage.setItem(saveName, myDiagram.model.toJson());
+      myDiagram.isModified = false;
+    }
+  }
+}
+
+// checks to see if all changes have been saved -> shows the open HTML element
+function openDocument() {
+  if (checkLocalStorage()) {
+    if (myDiagram.isModified) {
+      var save = confirm("Would you like to save changes to " + getCurrentFileName() + "?");
+      if (save) {
+        saveDocument();
+      }
+    }
+    openElement("openDocument", "mySavedFiles");
+  }
+}
+
+// shows the remove HTML element
+function removeDocument() {
+  if (checkLocalStorage()) {
+    openElement("removeDocument", "mySavedFiles2");
+  }
+}
+
+// these functions are called when panel buttons are clicked
+
+function loadFile() {
+  var listbox = document.getElementById("mySavedFiles");
+  // get selected filename
+  var fileName = undefined;
+  for (var i = 0; i < listbox.options.length; i++) {
+    if (listbox.options[i].selected) fileName = listbox.options[i].text; // selected file
+  }
+  if (fileName !== undefined) {
+    // changes the text of "currentFile" to be the same as the floor plan now loaded
+    setCurrentFileName(fileName);
+    // actually load the model from the JSON format string
+    var savedFile = window.localStorage.getItem(fileName);
+    myDiagram.model = go.Model.fromJson(savedFile);
+    myDiagram.model.undoManager.isEnabled = true;
+    myDiagram.isModified = false;
+    // eventually loadDiagramProperties will be called to finish
+    // restoring shared saved model/diagram properties
+  }
+  closeElement("openDocument");
+}
+
+function loadJSON(file) {
+    jQuery.getJSON(file, function (jsondata) {
+    // create the model from the data in the JavaScript object parsed from JSON text
+    //myDiagram.model = new go.GraphLinksModel(jsondata["nodes"], jsondata["links"]);
+    myDiagram.model = go.Model.fromJson(jsondata);
+    myDiagram.model.undoManager.isEnabled = true;
+    myDiagram.isModified = false;
+    });
+  }
+
+// Store shared model state in the Model.modelData property
+// (will be loaded by loadDiagramProperties)
+function saveDiagramProperties() {
+  myDiagram.model.modelData.position = go.Point.stringify(myDiagram.position);
+}
+
+// Called by myDiagram.addDiagramListener("InitialLayoutCompleted" ...,
+// NOT directly by loadFile.
+function loadDiagramProperties(e) {
+  var pos = myDiagram.model.modelData.position;
+  if (pos) myDiagram.position = go.Point.parse(pos);
+}
+
+
+// deletes the selected file from local storage
+function removeFile() {
+  var listbox = document.getElementById("mySavedFiles2");
+  // get selected filename
+  var fileName = undefined;
+  for (var i = 0; i < listbox.options.length; i++) {
+    if (listbox.options[i].selected) fileName = listbox.options[i].text; // selected file
+  }
+  if (fileName !== undefined) {
+    // removes file from local storage
+    window.localStorage.removeItem(fileName);
+    // the current document remains open, even if its storage was deleted
+  }
+  closeElement("removeDocument");
+}
+
+function updateFileList(id) {
+  // displays cached floor plan files in the listboxes
+  var listbox = document.getElementById(id);
+  // remove any old listing of files
+  var last;
+  while (last = listbox.lastChild) listbox.removeChild(last);
+  // now add all saved files to the listbox
+  for (var key in window.localStorage) {
+    var storedFile = window.localStorage.getItem(key);
+    if (!storedFile) continue;
+    var option = document.createElement("option");
+    option.value = key;
+    option.text = key;
+    listbox.add(option, null);
+  }
+}
+
+function openElement(id, listid) {
+  var panel = document.getElementById(id);
+  if (panel.style.visibility === "hidden") {
+    updateFileList(listid);
+    panel.style.visibility = "visible";
+  }
+}
+
+// hides the open/remove elements when the "cancel" button is pressed
+function closeElement(id) {
+  var panel = document.getElementById(id);
+  if (panel.style.visibility === "visible") {
+    panel.style.visibility = "hidden";
+  }
+}
 </script>
 
 
 <body onload="init()">
+<div>
+    <div id="currentFile">(Unsaved File)</div>
+    <ul id="menuui">
+        <li><a href="#">File</a>
+            <ul>
+                <li><a href="#" onclick="newDocument()">New</a></li>
+                <li><a href="#" onclick="openDocument()">Open...</a></li>
+                <li><a href="#" onclick="saveDocument()">Save</a></li>
+                <li><a href="#" onclick="saveDocumentAs()">Save As...</a></li>
+                <li><a href="#" onclick="removeDocument()">Delete...</a></li>
+            </ul>
+        </li>
+        <li><a href="#">Edit</a>
+            <ul>
+                <li><a href="#" onclick="myDiagram.commandHandler.undo()">Undo</a></li>
+                <li><a href="#" onclick="myDiagram.commandHandler.redo()">Redo</a></li>
+                <li><a href="#" onclick="myDiagram.commandHandler.cutSelection()">Cut</a></li>
+                <li><a href="#" onclick="myDiagram.commandHandler.copySelection()">Copy</a></li>
+                <li><a href="#" onclick="myDiagram.commandHandler.pasteSelection()">Paste</a></li>
+                <li><a href="#" onclick="myDiagram.commandHandler.deleteSelection()">Delete</a></li>
+                <li><a href="#" onclick="myDiagram.commandHandler.selectAll()">Select All</a></li>
+            </ul>
+        </li>
+    </ul>
+    <!--END menu bar -->
 
+
+
+    <!-- Styling for this portion is in BPMN.css -->
+    <div id="PaletteAndDiagram">
+        <div id="sideBar">
+
+    <span style="display: inline-block; vertical-align: top; padding: 5px; width:100%">
+      
+             
+          <div id="sample">    
+            <span style="vertical-align: top; padding: 5px; width:150px">
+              <div id="myPalette" style="border: solid 1px gray; height: 620px"></div>
+            </span>
+          </div>
+          
+          
+      
+    </span>
+
+            <div class="handle">Overview:</div>
+            <div id="myOverview"></div>
+        </div>
+        <div id="myDiagram"></div>
+
+
+    
 
 <div id="sample">
   <div style="width:100%; white-space:nowrap;">
-    <span style="display: inline-block; vertical-align: top; padding: 5px; width:150px">
-      <div id="myPalette" style="border: solid 1px gray; height: 620px"></div>
-    </span>
+    
 
     <span style="display: inline-block; vertical-align: top; padding: 5px; width:60%">
       <div id="myDiagram" style="border: solid 1px gray; height: 620px"></div>
     </span>
 
-    <span style="display: inline-block; vertical-align: top; padding: 5px; width:60%">
-      <div id="infoDraggable" style="display: inline-block; vertical-align: top; padding: 5px;">
-      <div id="myInfo">Selecting nodes in the main Diagram will display information here</div>
-    </div>
-
-    </span>
+    
   </div>
   
+  <div id="sample">
+    <span style="display: inline-block; vertical-align: top; padding: 5px; width:100%">
+      <div id="infoDraggable" style="display: inline-block; vertical-align: top; padding: 10px;">
+      <div id="myInfo">Selecting nodes in the main Diagram will display information here</div>
+    </div>
   
   <button id="SaveButton" onclick="save()">Save</button>
   <button onclick="load()">Load</button>
+  <button onclick="test()">Test</button>
   <textarea id="mySavedModel" style="width:100%;height:300px">{ "class": "go.GraphLinksModel",
   "linkFromPortIdProperty": "fromPort",
   "linkToPortIdProperty": "toPort",
@@ -349,3 +660,9 @@ function init() {
  ]}
   </textarea>
 </div>
+
+
+
+
+
+    </div>

@@ -6,7 +6,7 @@
   .inspector-container {
     color: #FDFDFD;
     background-color: #272625;
-    width: 240px;
+    width: 290px;
     padding: 2px;
     height: 620px;
   }
@@ -64,7 +64,7 @@
   }
 
   .row {
-    margin-bottom: 2px;
+    margin-bottom: 5px;
   }
 
   .cell {

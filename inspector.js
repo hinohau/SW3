@@ -874,6 +874,10 @@ go.GraphObject._inspectedProperties = {
     type: "number",
     defaultValue: 1
   },
+  "voltage": {
+    type: "object",
+    defaultValue: 4
+  },
   "angle": {
     type: "number",
     defaultValue: 0
