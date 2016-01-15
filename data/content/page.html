@@ -1,0 +1,249 @@
+
+<link href="page.css" rel="stylesheet" type="text/css"/>
+<script src="interact.js" type="text/javascript"></script>
+<script src="interact.min.js" type="text/javascript"></script>
+<script src="go.js" type="text/javascript"></script>
+<link href="goSamples.css" rel="stylesheet" type="text/css" />
+<script src="go-debug.js" type="text/javascript"></script>
+
+
+<script src="goSamples.js"></script>  <!-- this is only for the GoJS Samples framework -->
+
+<link rel="stylesheet" href="jquery-ui.css" />
+<script src="jquery.min.js"></script>
+<script src="jquery-ui.min.js"></script>
+
+
+
+
+<script src='spectrum.js'></script>
+<link href="spectrum.css" rel="stylesheet" type="text/css"/>
+
+
+
+<link rel='stylesheet' href='inspector.css' />
+<script src="inspector.js"></script>
+<script src="ExtendedBrush.js"></script>
+
+<script>
+// target elements with the "draggable" class
+interact('.draggable')
+  .draggable({
+    // enable inertial throwing
+    inertia: true,
+    // keep the element within the area of it's parent
+    restrict: {
+      restriction: "parent",
+      endOnly: true,
+      elementRect: { top: 0, left: 0, bottom: 1, right: 1 }
+    },
+    // enable autoScroll
+    autoScroll: true,
+
+    // call this function on every dragmove event
+    onmove: dragMoveListener,
+    // call this function on every dragend event
+    onend: function (event) {
+      var textEl = event.target.querySelector('p');
+
+      textEl && (textEl.textContent =
+        'moved a distance of '
+        + (Math.sqrt(event.dx * event.dx +
+                     event.dy * event.dy)|0) + 'px');
+    }
+  });
+
+  function dragMoveListener (event) {
+    var target = event.target,
+        // keep the dragged position in the data-x/data-y attributes
+        x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx,
+        y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+
+    // translate the element
+    target.style.webkitTransform =
+    target.style.transform =
+      'translate(' + x + 'px, ' + y + 'px)';
+
+    // update the posiion attributes
+    target.setAttribute('data-x', x);
+    target.setAttribute('data-y', y);
+  }
+
+  // this is used later in the resizing and gesture demos
+  window.dragMoveListener = dragMoveListener;
+/* The dragging code for '.draggable' from the demo above
+ * applies to this demo as well so it doesn't have to be repeated. */
+
+// enable draggables to be dropped into this
+interact('.dropzone').dropzone({
+  // only accept elements matching this CSS selector
+  accept: '#yes-drop',
+  // Require a 75% element overlap for a drop to be possible
+  overlap: 0.75,
+
+  // listen for drop related events:
+  /*
+  ondropactivate: function (event) {
+    // add active dropzone feedback
+    event.target.classList.add('drop-active');
+  },
+  ondragenter: function (event) {
+    var draggableElement = event.relatedTarget,
+        dropzoneElement = event.target;
+
+    // feedback the possibility of a drop
+    dropzoneElement.classList.add('drop-target');
+    draggableElement.classList.add('can-drop');
+    draggableElement.textContent = 'Dragged in';
+  },
+  ondragleave: function (event) {
+    // remove the drop feedback style
+    event.target.classList.remove('drop-target');
+    event.relatedTarget.classList.remove('can-drop');
+    event.relatedTarget.textContent = 'Dragged out';
+  },
+  ondrop: function (event) {
+    event.relatedTarget.textContent = 'Dropped';
+  },
+  ondropdeactivate: function (event) {
+    // remove active dropzone feedback
+    event.target.classList.remove('drop-active');
+    event.target.classList.remove('drop-target');
+  }
+  */
+});
+
+function init() {
+    if (window.goSamples) goSamples();  // init for these samples -- you don't need to call this
+
+    // Note that we do not use $ here as an alias for go.GraphObject.make because we are using $ for jQuery
+    var GO = go.GraphObject.make;  // for conciseness in defining templates
+
+    myDiagram =
+      GO(go.Diagram, "myDiagram",  // must name or refer to the DIV HTML element
+         { allowDrop: true });  // must be true to accept drops from the Palette
+
+    // define several shared Brushes
+    var fill1 = "rgb(105,210,231)"
+    var brush1 = "rgb(65,180,181)";
+
+    var fill2 = "rgb(167,219,216)"
+    var brush2 = "rgb(127,179,176)";
+
+    var fill3 = "rgb(224,228,204)"
+    var brush3 = "rgb(184,188,164)";
+
+    var fill4 = "rgb(243,134,48)"
+    var brush4 = "rgb(203,84,08)";
+
+    myDiagram.nodeTemplateMap.add("", // default category
+      GO(go.Node, "Auto",
+        { locationSpot: go.Spot.Center },
+        new go.Binding("location", "loc", go.Point.parse).makeTwoWay(go.Point.stringify),
+        GO(go.Shape, "Ellipse",
+          { strokeWidth: 2, fill: fill1, name: "SHAPE" },
+          new go.Binding("figure", "figure"),
+          new go.Binding("fill", "fill"),
+          new go.Binding("stroke", "stroke")
+          ),
+        GO(go.TextBlock,
+          { margin: 5,
+            maxSize: new go.Size(200, NaN),
+            wrap: go.TextBlock.WrapFit,
+            textAlign: "center",
+            editable: true,
+            font: "bold 9pt Helvetica, Arial, sans-serif",
+            name: "TEXT" },
+          new go.Binding("text", "text").makeTwoWay())));
+
+
+    // initialize the Palette that is in a floating, draggable HTML container
+    myPalette = new go.Palette("myPalette");  // must name or refer to the DIV HTML element
+    myPalette.nodeTemplateMap = myDiagram.nodeTemplateMap;
+    myPalette.model = new go.GraphLinksModel([
+      { text: "Lake", fill: fill1, stroke: brush1, figure: "Hexagon" },
+      { text: "Ocean", fill: fill2, stroke: brush2, figure: "Rectangle" },
+      { text: "Sand", fill: fill3, stroke: brush3, figure: "Diamond" },
+      { text: "Goldfish", fill: fill4, stroke: brush4, figure: "Octagon" }
+    ]);
+
+    myPalette.addDiagramListener("InitialLayoutCompleted", function(diagramEvent) {
+      var pdrag = document.getElementById("paletteDraggable");
+      var palette = diagramEvent.diagram;
+      var paddingHorizontal = palette.padding.left + palette.padding.right;
+      var paddingVertical = palette.padding.top + palette.padding.bottom;
+      pdrag.style.width = palette.documentBounds.width + 20  + "px";
+      pdrag.style.height = palette.documentBounds.height + 30 + "px";
+    });
+
+
+    $(function() {
+        $("#paletteDraggable").draggable({handle: "#paletteDraggableHandle"}).resizable({
+          // After resizing, perform another layout to fit everything in the palette's viewport
+          stop: function(){ myPalette.layoutDiagram(true); }
+        });
+
+        var inspector = new Inspector('infoDraggable', myDiagram,
+          {
+            acceptButton: true,
+            resetButton: true,
+            propertyNames: {
+              "Node": ["location", "background", "scale", "angle", "isShadowed", "resizable"],
+              "#SHAPE": ["fill", "stroke", "strokeWidth", "figure"],
+              "#TEXT": ["text", "font"]
+            }
+          });
+        });
+
+  }
+
+</script>
+
+<div id="yes-drop" class="draggable drag-drop"> 1 </div>
+
+<div id="yes-drop" class="draggable drag-drop"> 2 </div>
+
+<div id="yes-drop" class="draggable drag-drop"> 3 </div>
+
+<div id="yes-drop" class="draggable drag-drop"> 4 </div>
+
+<div id="yes-drop" class="draggable drag-drop"> 5 </div>
+
+<div id="yes-drop" class="draggable drag-drop"> 6 </div>
+
+<div id="yes-drop" class="draggable drag-drop"> 7 </div>
+
+<div id="yes-drop" class="draggable drag-drop"> 8 </div>
+
+<div id="yes-drop" class="draggable drag-drop1"> </div>
+
+<div id="outer-dropzone" class="dropzone">
+  dropzone
+ </div>
+
+ <div id="sample">
+
+    <div id="paletteDraggable" class="draggable" style="height: 300px;">
+      <div id="paletteDraggableHandle" class="handle">Palette</div>
+      <div id="paletteContainer">
+        <div id="myPalette"></div>
+      </div>
+    </div>
+
+    <div style="display: inline-block; vertical-align: top; padding: 5px; width:400px">
+      <div id="myDiagram" style="background-color: whitesmoke; border: solid 1px black; height: 400px"></div>
+    </div>
+
+    <div id="infoDraggable" style="display: inline-block; vertical-align: top; padding: 5px;">
+      <div id="myInfo">Selecting nodes in the main Diagram will display information here</div>
+    </div>
+
+    <p>
+      This sample contains a draggable HTML element (using jQuery UI), which houses a GoJS Palette.
+    </p>
+    <p>
+      A DIV to the right of the diagram houses a <a href="../extensions/inspector.html">GoJS GraphObject inspector</a>,
+      which displays some editable information about each Node.
+    </p>
+
+</div>
